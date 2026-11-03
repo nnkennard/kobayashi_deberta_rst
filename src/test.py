@@ -95,7 +95,7 @@ def get_config():
 
 def main():
     config = get_config()
-    device = torch.device("cuda:0")  # hard codded
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     dataset = DataModule.from_config(config, parser=None)
 
     if config.ckpt_path:

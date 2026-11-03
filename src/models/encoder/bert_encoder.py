@@ -1,8 +1,22 @@
+from urllib.parse import urljoin
+
 import torch
+import transformers.utils.hub as transformers_hub
 from transformers import AutoConfig, AutoModel, AutoTokenizer
 
 from data.doc import Doc
 from models.encoder import Encoder
+
+_http_get = transformers_hub.http_get
+
+
+def _http_get_with_absolute_url(url, *args, **kwargs):
+    # The Hugging Face Hub now redirects to relative URLs, which the pinned
+    # transformers version passes to requests as is (MissingSchema).
+    return _http_get(urljoin(transformers_hub.HUGGINGFACE_CO_RESOLVE_ENDPOINT, url), *args, **kwargs)
+
+
+transformers_hub.http_get = _http_get_with_absolute_url
 
 
 def complete_model_name(model_name):

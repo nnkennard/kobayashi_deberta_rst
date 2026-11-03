@@ -7,7 +7,7 @@ SAVE_DIR=./models/rstdt
 PARSER_TYPE=shift_reduce_v1
 BERT_TYPE=deberta-base
 LR=1e-5
-NUM_GPUS=1
+NUM_GPUS=$(python -c "import torch; print(min(torch.cuda.device_count(), 1))")
 export CUDA_VISIBLE_DEVICES=0
 for SEED in 0 1 2; do
     MODEL_NAME=$PARSER_TYPE.$BERT_TYPE.$LR
