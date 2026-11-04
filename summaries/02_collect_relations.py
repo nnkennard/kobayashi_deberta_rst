@@ -11,9 +11,7 @@ EDU numbers in spans are 0-based, restart for each document and are inclusive at
 both ends. A summary is the empty string if its span has no entry in the
 summaries file.
 
-A child's text is built from its single-EDU entries in the span map, because
-the span map doesn't contain every child span: it is built from the original
-trees, while the relations come from the binarized trees.
+A child's text is built from its single-EDU entries in the span map.
 """
 
 import argparse

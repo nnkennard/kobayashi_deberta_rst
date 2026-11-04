@@ -14,6 +14,9 @@ EDU numbers are 0-based and restart for each document, so spans are grouped by
 document. Both ends of a span are inclusive: "2-4" covers EDUs 2, 3 and 4, and
 "3-3" is the single EDU 3.
 
+Trees are binarized before anything is extracted, so both files describe the
+same binary trees.
+
 There is one relation per internal node of the binarized tree, in document order
 and top-down. Trees are binarized and relations labelled as in src/data/tree.py,
 and relations use the coarse-grained classes of RELATION_TABLE in
@@ -167,29 +170,33 @@ def coarse_relation(relation):
     return RELATION_TABLE[relation]
 
 
-def split_children(children):
-    """Return the (left, right) subtrees of a node, binarizing it if needed."""
-    if len(children) == 2:
-        return children
+def binarize(node):
+    """Return a copy of a parsed tree in which no node has over two children."""
+    if not isinstance(node, Node):
+        return node
 
-    labels = [child.label for child in children]
-    if all(label == labels[0] for label in labels):
-        # Multinuclear relation: right-heavy.
-        return children[0], Node(labels[0], children[1:])
-    if len(children) == 3 and labels[1] == "nucleus:span":
-        # Satellite, nucleus, satellite: left-heavy.
-        return Node("nucleus:span", children[:2]), children[2]
-    raise ValueError(f"cannot binarize node with children {labels}")
+    children = node.children
+    if len(children) > 2:
+        labels = [child.label for child in children]
+        if all(label == labels[0] for label in labels):
+            # Multinuclear relation: right-heavy.
+            children = [children[0], Node(labels[0], children[1:])]
+        elif len(children) == 3 and labels[1] == "nucleus:span":
+            # Satellite, nucleus, satellite: left-heavy.
+            children = [Node("nucleus:span", children[:2]), children[2]]
+        else:
+            raise ValueError(f"cannot binarize node with children {labels}")
+    return Node(node.label, [binarize(child) for child in children])
 
 
 def iter_relations(node):
-    """Yield a relation dict for each internal node of a parsed tree, top-down."""
+    """Yield a relation dict for each internal node of a binarized tree, top-down."""
     if len(node.children) == 1:
         if isinstance(node.children[0], Node):
             raise ValueError(f"non-EDU only child under {node.label}")
         return
 
-    left, right = split_children(node.children)
+    left, right = node.children
     left_nuclearity, left_relation = left.label.split(":", maxsplit=1)
     right_nuclearity, right_relation = right.label.split(":", maxsplit=1)
     relation = left_relation if left_relation != "span" else right_relation
@@ -232,7 +239,7 @@ def extract(docs):
         if doc_id in span_map:
             raise ValueError(f"duplicate doc_id {doc_id}")
         edus = get_edus(doc)
-        tree = parse_tree(doc["rst_tree"])
+        tree = binarize(parse_tree(doc["rst_tree"]))
         span_map[doc_id] = {
             span_key(start, end): edus[start:end + 1]
             for start, end in sorted(collect_spans(tree))
