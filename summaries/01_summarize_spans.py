@@ -3,11 +3,12 @@ import os
 import sys
 
 import requests
+from tqdm import tqdm
 
 TRAIN, TEST, VALID = "train test valid".split()
 SPLITS = [TRAIN, TEST, VALID]
 
-EDU_DECODE_RE = "/([0-9]+)\-([0-9]+)"
+EDU_DECODE_RE = r"/([0-9]+)\-([0-9]+)"
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 LLAMA_MODEL = "llama3.2"
@@ -50,24 +51,29 @@ def main():
     summaries = load_checkpoint(CHECKPOINT_PATH)
 
     todo = []
+    doc_count = 0
     for doc_id, edu_spans in m.items():
         for key, span_texts in edu_spans.items():
             text = " ".join(span_texts)
             if len(text.split()) > 10 and key not in summaries.get(doc_id, {}):
                 todo.append((doc_id, key, text))
-    print(f"{len(todo)} spans to summarize", flush=True)
+        doc_count += 1
+        if doc_count == 20:
+            break
 
     # Failed spans stay out of the checkpoint, so the next run retries them.
     failures = 0
     consecutive_failures = 0
     try:
-        for i, (doc_id, key, text) in enumerate(todo, 1):
+        progress = tqdm(todo, desc="Summarizing", unit="span")
+        for i, (doc_id, key, text) in enumerate(progress, 1):
             try:
                 summary = summarize(text)
             except (requests.RequestException, KeyError) as e:
                 failures += 1
                 consecutive_failures += 1
-                print(f"FAILED {doc_id} {key}: {e!r}", file=sys.stderr, flush=True)
+                progress.set_postfix(failed=failures)
+                tqdm.write(f"FAILED {doc_id} {key}: {e!r}", file=sys.stderr)
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     sys.exit(f"Stopping after {consecutive_failures} consecutive failures")
                 continue
@@ -75,7 +81,6 @@ def main():
             summaries.setdefault(doc_id, {})[key] = summary
             if i % CHECKPOINT_EVERY == 0:
                 save_checkpoint(summaries, CHECKPOINT_PATH)
-                print(f"{i}/{len(todo)} done, {failures} failed", flush=True)
     finally:
         save_checkpoint(summaries, CHECKPOINT_PATH)
 
